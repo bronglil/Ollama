@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f1f1f1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .chat-container {
+            width: 70%;
+            /* Make the chat container wider */
+            max-width: 1200px;
+            /* Maximum width */
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            height: 80vh;
+            /* Almost full screen height */
+            overflow: hidden;
+        }
+
+        .chat-box {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .chat-box .message-container {
+            display: flex;
+            align-items: flex-end;
+            margin-bottom: 15px;
+        }
+
+        .chat-box .message {
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            line-height: 1.5;
+            max-width: 70%;
+        }
+
+        .chat-box .message.user {
+            background-color: #007bff;
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 0;
+        }
+
+        .chat-box .message.bot {
+            background-color: #f1f1f1;
+            color: #333;
+            border-bottom-left-radius: 0;
+        }
+
+        .chat-box .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-size: cover;
+            margin-right: 10px;
+        }
+
+        .chat-box .avatar.bot-avatar {
+            background-image: url('https://ollama.com/public/ollama.png');
+            /* Updated Ollama logo */
+        }
+
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #ddd;
+            background-color: #f9f9f9;
+        }
+
+        .chat-input input {
+            flex-grow: 1;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            margin-right: 10px;
+            outline: none;
+        }
+
+        .chat-input button {
+            padding: 12px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+        }
+
+        .chat-input button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="chat-container">
+        <div class="chat-box" id="chatBox"></div>
+        <div class="chat-input">
+            <input type="text" id="userMessage" placeholder="Type your message..." />
+            <button id="sendButton" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        async function sendMessage() {
+            const messageInput = document.getElementById('userMessage');
+            const chatBox = document.getElementById('chatBox');
+            const sendButton = document.getElementById('sendButton');
+            const userMessage = messageInput.value.trim();
+
+            if (!userMessage) return;
+
+            // Add user's message to the chat without avatar
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.className = 'message-container';
+            userMessageDiv.innerHTML = `
+            <div class="message user">${userMessage}</div>
+        `;
+            chatBox.appendChild(userMessageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // Clear input and disable send button
+            messageInput.value = '';
+            sendButton.disabled = true;
+
+            try {
+                const response = await fetch('http://localhost:4000/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: 'llama3', // Adjust to the model you are using
+                        prompt: userMessage,
+                        max_tokens: 100,
+                    }),
+                });
+
+                let fullResponse = '';
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                // Process stream response from Ollama
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    fullResponse += decoder.decode(value);
+                }
+
+                // Extract the bot response and add it to the chat with avatar
+                const parsedResponse = JSON.parse(fullResponse.trim().split('\n').pop());
+                const botResponse = parsedResponse.response.trim();
+
+                const botMessageDiv = document.createElement('div');
+                botMessageDiv.className = 'message-container';
+                botMessageDiv.innerHTML = `
+                <div class="avatar bot-avatar"></div>
+                <div class="message bot">${botResponse}</div>
+            `;
+                chatBox.appendChild(botMessageDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch (error) {
+                console.error('Error interacting with the Ollama API:', error);
+                const errorMessageDiv = document.createElement('div');
+                errorMessageDiv.className = 'message-container';
+                errorMessageDiv.innerHTML = `
+                <div class="avatar bot-avatar"></div>
+                <div class="message bot">Sorry, something went wrong!</div>
+            `;
+                chatBox.appendChild(errorMessageDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } finally {
+                sendButton.disabled = false;
+            }
+        }
+
+        // Send message on Enter key press
+        document.getElementById('userMessage').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+
+</body>
+
+</html>
